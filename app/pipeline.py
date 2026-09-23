@@ -73,6 +73,8 @@ class GenParams:
     samples: int = 1
     model: str = ""
     scheduler: str = "DPM++ 2M Karras"
+    lora: str = ""  # path to a .safetensors/.ckpt/.pt LoRA file ("" = none)
+    lora_scale: float = 1.0
 
 
 class DiffusionEngine:
@@ -310,6 +312,23 @@ class DiffusionEngine:
             args.append(f"{max(1.0, (vram - 512) / 1024):.1f}")
         return args
 
+    @staticmethod
+    def _apply_lora_sdcpp(params: GenParams) -> tuple[list[str], str]:
+        """Inject <lora:name:scale> into the prompt and set --lora-model-dir."""
+        lora_path = (params.lora or "").strip()
+        if not lora_path:
+            return [], params.prompt
+        p = Path(lora_path)
+        if not p.is_file():
+            raise FileNotFoundError(f"LoRA file not found: {lora_path}")
+        scale = float(params.lora_scale)
+        stem = p.stem
+        prompt = params.prompt or ""
+        if f"<lora:{stem}:" not in prompt:
+            prompt = f"{prompt}<lora:{stem}:{scale:g}>"
+        # sd-cli resolves the name under --lora-model-dir (filename without ext)
+        return ["--lora-model-dir", str(p.parent)], prompt
+
     def _generate_sdcpp(self, params: GenParams, seed: int, stamp: str, progress_cb) -> list[Path]:
         # Keep BackendInfo.device in sync with the sd-cli build on disk
         # (e.g. requested CUDA but only the Vulkan build could be downloaded).
@@ -331,6 +350,7 @@ class DiffusionEngine:
         n = max(1, int(params.samples))
         backend_args = self._sd_backend_args(binary)
         vram_args = self._vram_args(model)
+        lora_args, prompt = self._apply_lora_sdcpp(params)
 
         # Stream sd-cli output so failures are visible immediately
         env = os.environ.copy()
@@ -344,7 +364,7 @@ class DiffusionEngine:
             cmd = [
                 str(binary),
                 "-m", model,
-                "-p", params.prompt,
+                "-p", prompt,
                 "-n", params.negative_prompt or "",
                 "-W", str(int(params.width)),
                 "-H", str(int(params.height)),
@@ -355,7 +375,7 @@ class DiffusionEngine:
                 "-b", "1",
                 "--sampling-method", "dpm++2m",
                 "--scheduler", "karras",
-            ] + backend_args + vram_args
+            ] + backend_args + vram_args + lora_args
 
             proc = subprocess.Popen(
                 cmd,

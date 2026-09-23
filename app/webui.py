@@ -119,6 +119,13 @@ def build_ui() -> gr.Blocks:
                             lines=2,
                             value="blurry, low quality, watermark, text, deformed",
                         )
+                        lora_dd = gr.Dropdown(
+                            choices=_lora_choices(),
+                            value="",
+                            label="LoRA (none if empty)",
+                            allow_custom_value=True,
+                        )
+                        lora_scale = gr.Slider(0.0, 2.0, value=1.0, step=0.05, label="LoRA scale")
                         with gr.Accordion("Advanced", open=False):
                             steps = gr.Slider(4, 80, value=26, step=1, label="Steps")
                             cfg = gr.Slider(1.0, 14.0, value=7.0, step=0.5, label="CFG Scale")
@@ -132,7 +139,7 @@ def build_ui() -> gr.Blocks:
                         status = gr.Markdown("Ready.")
                         open_out = gr.Markdown("")
 
-                def _run(pr, neg, st, w, h, cfg_s, sd, n, model):
+                def _run(pr, neg, st, w, h, cfg_s, sd, n, model, lora, lora_w):
                     backend_in = ensure_backend()
                     eng = get_engine(backend_in)
                     params = GenParams(
@@ -145,6 +152,8 @@ def build_ui() -> gr.Blocks:
                         seed=int(sd),
                         samples=int(n),
                         model=model or "",
+                        lora=(lora or "").strip(),
+                        lora_scale=float(lora_w),
                     )
                     t0 = time.time()
                     try:
@@ -152,7 +161,8 @@ def build_ui() -> gr.Blocks:
                         imgs = [str(p) for p in paths]
                         dt = time.time() - t0
                         used_seed = params.seed if params.seed is not None and int(params.seed) >= 0 else "auto"
-                        status = f"Done in **{dt:.1f}s** · seed `{used_seed}`"
+                        lora_note = f" · LoRA `{Path(params.lora).stem}` ×{params.lora_scale:g}" if params.lora else ""
+                        status = f"Done in **{dt:.1f}s** · seed `{used_seed}`{lora_note}"
                         folder = str(ROOT / "outputs")
                         return imgs, status, f"Saved to `{folder}`"
                     except Exception as e:
@@ -160,12 +170,12 @@ def build_ui() -> gr.Blocks:
 
                 run_btn.click(
                     _run,
-                    inputs=[prompt, negative, steps, width, height, cfg, seed, samples, model_dd],
+                    inputs=[prompt, negative, steps, width, height, cfg, seed, samples, model_dd, lora_dd, lora_scale],
                     outputs=[gallery, status, open_out],
                 )
 
             with gr.TabItem("Models"):
-                gr.Markdown("Download models from **Hugging Face** or **CivitAI**. CivitAI NSFW/age-gated models need `CIVITAI_API_KEY` in the environment — the key is never stored.")
+                gr.Markdown("Download models from **Hugging Face** or **CivitAI**. Checkpoints go to `models/checkpoints/`; LoRA (type **LORA**) goes to `models/loras/`. CivitAI NSFW/age-gated models need `CIVITAI_API_KEY` in the environment — the key is never stored.")
                 with gr.Row():
                     hf_repo = gr.Textbox(label="Hugging Face repo id", placeholder="second-state/stable-diffusion-v1-5-GGUF")
                     hf_file = gr.Textbox(label="Filename (optional)", placeholder="stable-diffusion-v1-5-pruned-emaonly-Q5_1.gguf")
@@ -175,6 +185,11 @@ def build_ui() -> gr.Blocks:
                     civit_btn = gr.Button("Download from CivitAI", variant="primary")
                 with gr.Row():
                     search_in = gr.Textbox(label="Search CivitAI", placeholder="e.g. anime pastel")
+                    search_type = gr.Dropdown(
+                        ["Checkpoint", "LORA", "Embedding", "VAE"],
+                        value="Checkpoint",
+                        label="Type",
+                    )
                     search_btn = gr.Button("Search")
                 search_table = gr.Dataframe(headers=["name", "type", "base", "downloads", "rating", "url"], label="Results", interactive=False)
                 dl_status = gr.Markdown("")
@@ -189,31 +204,31 @@ def build_ui() -> gr.Blocks:
                 def _hf(repo, filename):
                     try:
                         files = download_huggingface(repo.strip(), filename.strip() or None)
-                        return f"Downloaded {len(files)} file(s):\n" + "\n".join(f"- `{f}`" for f in files), _local_rows()
+                        return f"Downloaded {len(files)} file(s):\n" + "\n".join(f"- `{f}`" for f in files), _local_rows(), _lora_choices()
                     except Exception as e:
-                        return f"**HF error:** {e}", _local_rows()
+                        return f"**HF error:** {e}", _local_rows(), _lora_choices()
 
                 def _civit(link):
                     try:
                         p = download_civitai(link.strip())
-                        return f"Downloaded `{p}` ({p.stat().st_size // (1<<20)} MB)", _local_rows()
+                        return f"Downloaded `{p}` ({p.stat().st_size // (1<<20)} MB)", _local_rows(), _lora_choices()
                     except Exception as e:
-                        return f"**CivitAI error:** {e}", _local_rows()
+                        return f"**CivitAI error:** {e}", _local_rows(), _lora_choices()
 
-                def _search(q):
+                def _search(q, typ):
                     try:
                         rows = [
                             [i["name"], i["type"], i["base_model"], i["downloads"], i["rating"], i["download_url"] or ""]
-                            for i in search_civitai(q.strip())
+                            for i in search_civitai(q.strip(), civit_type=typ or "Checkpoint")
                         ]
                         return rows or [["No results", "", "", "", "", ""]]
                     except Exception as e:
                         return [[f"Error: {e}", "", "", "", "", ""]]
 
-                hf_btn.click(_hf, inputs=[hf_repo, hf_file], outputs=[dl_status, local_table])
-                civit_btn.click(_civit, inputs=[civit_in], outputs=[dl_status, local_table])
-                search_btn.click(_search, inputs=[search_in], outputs=[search_table])
-                refresh_local.click(lambda: _local_rows(), outputs=[local_table])
+                hf_btn.click(_hf, inputs=[hf_repo, hf_file], outputs=[dl_status, local_table, lora_dd])
+                civit_btn.click(_civit, inputs=[civit_in], outputs=[dl_status, local_table, lora_dd])
+                search_btn.click(_search, inputs=[search_in, search_type], outputs=[search_table])
+                refresh_local.click(lambda: (_local_rows(), _lora_choices()), outputs=[local_table, lora_dd])
 
             with gr.TabItem("Backend"):
                 gr.Markdown(
@@ -306,9 +321,15 @@ def backend_reasonable_default() -> str:
 def _model_choices() -> list[str]:
     backend = ensure_backend()
     default = default_model_for(backend.engine)
-    choices = [m["path"] for m in list_local_models()]
+    choices = [m["path"] for m in list_local_models() if m["kind"] == "checkpoint"]
     if default not in choices:
         choices = [default] + choices
+    return choices
+
+
+def _lora_choices() -> list[str]:
+    """Paths under models/loras (sd-cli style) plus a blank for none."""
+    choices = [""] + [m["path"] for m in list_local_models() if m["kind"] == "lora"]
     return choices
 
 

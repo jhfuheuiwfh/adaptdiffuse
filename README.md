@@ -47,7 +47,8 @@ The DirectML/torch path defaults to `stable-diffusion-v1-5/stable-diffusion-v1-5
 ## Features
 
 - **WebUI (Gradio)** — prompt, advanced params, gallery, model manager, backend switcher
-- **Model downloader** — Hugging Face repos + CivitAI URLs/IDs/search
+- **LoRA** — pick a file under `models/loras/` + scale; applied via sd-cli `<lora:name:scale>` syntax
+- **Model downloader** — Hugging Face repos + CivitAI URLs/IDs/search (type `LORA` → `models/loras/`)
 - **Local models** — scans `models/` for `.safetensors` / `.ckpt` / `.gguf`
 - **Weak-GPU optimizations** — attention slicing, VAE slicing, DPM++ 2M Karras, conservative resolutions
 - **No telemetry** — prompts and images stay on your machine
@@ -83,10 +84,10 @@ adaptdiffuse/
 ├── app/
 │   ├── backend.py       # GPU detect + cascade + installers
 │   ├── pipeline.py      # diffusers + stable-diffusion.cpp engines
-│   ├── downloader.py    # HF / CivitAI
-│   ├── webui.py         # Gradio UI
+│   ├── downloader.py    # HF / CivitAI (checkpoints, LoRAs)
+│   ├── webui.py         # Gradio UI (incl. LoRA dropdown + scale)
 │   └── main.py          # CLI entry
-├── models/              # checkpoints (gitignored)
+├── models/              # checkpoints/, loras/, vae (gitignored)
 └── outputs/             # generations (gitignored)
 ```
 

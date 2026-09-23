@@ -21,6 +21,9 @@ MODELS_DIR = ROOT / "models"
 CHECKPOINTS_DIR = MODELS_DIR / "checkpoints"
 LORA_DIR = MODELS_DIR / "loras"
 VAE_DIR = MODELS_DIR / "vae"
+# Ensure model kind folders exist so the UI lists them and sd-cli can scan them
+for _d in (CHECKPOINTS_DIR, LORA_DIR, VAE_DIR):
+    _d.mkdir(parents=True, exist_ok=True)
 
 HF_DIRECT_RE = re.compile(r"^https?://huggingface\.co/.+")
 CIVIT_URL = "https://civitai.com/api/v1/models"
@@ -102,13 +105,17 @@ def download_url(url: str, dest_dir: Optional[Path] = None, filename: Optional[s
     return _stream_to(url, target_dir / name)
 
 
-def search_civitai(query: str, limit: int = 8) -> list[dict]:
+def search_civitai(query: str, limit: int = 8, civit_type: str = "Checkpoint") -> list[dict]:
     """Search CivitAI public model API (no token required for SFW listings)."""
     headers = {}
     key = os.environ.get("CIVITAI_API_KEY")
     if key:
         headers["Authorization"] = f"Bearer {key}"
-    params = {"types": "Checkpoint", "limit": limit, "sort": "Highest Rated"}
+    params = {"limit": limit, "sort": "Highest Rated"}
+    if civit_type and civit_type.strip():
+        params["types"] = civit_type.strip()
+    else:
+        params["types"] = "Checkpoint"
     if query and query.strip():
         params["query"] = query.strip()
     r = requests.get(CIVIT_URL, params=params, headers=headers, timeout=60)
@@ -146,6 +153,8 @@ def download_civitai(url_or_id: str) -> Path:
         r = requests.get(f"{CIVIT_URL}/{url_or_id}", headers=headers, timeout=60)
         r.raise_for_status()
         model = r.json()
+        mtype = (model.get("type") or "").lower()
+        dest_dir = LORA_DIR if mtype == "lora" else CHECKPOINTS_DIR
         versions = model.get("modelVersions") or []
         if not versions:
             raise RuntimeError("No model versions found on CivitAI")
@@ -156,7 +165,7 @@ def download_civitai(url_or_id: str) -> Path:
         name = files[0].get("name") or f"civitai_{url_or_id}.safetensors"
         if not dl:
             raise RuntimeError("CivitAI file has no downloadUrl")
-        return download_url(dl, filename=_safe_name(name))
+        return download_url(dl, dest_dir=dest_dir, filename=_safe_name(name))
 
     if "civitai.com" in url_or_id and "/models/" in url_or_id and "download" not in url_or_id:
         m = re.search(r"/models/(\d+)", url_or_id)
