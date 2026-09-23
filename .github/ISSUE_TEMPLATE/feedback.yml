@@ -1,0 +1,30 @@
+name: Feedback
+description: Share feedback, ideas, or general comments about AdaptDiffuse
+title: "[Feedback]: "
+labels: ["feedback"]
+body:
+  - type: textarea
+    id: feedback
+    attributes:
+      label: What would you like to say?
+      description: Ideas, praise, suggestions, or general feedback.
+      placeholder: I think...
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Idea / feature request
+        - UI / UX
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: contact
+    attributes:
+      label: Contact
+      options:
+        - label: You can also email stableuser1223@gmail.com instead of (or in addition to) this issue.

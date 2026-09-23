@@ -304,8 +304,8 @@ sd-cli uses ggml quantization straight from the model file (GGUF recommended).
 
 **Email:** [stableuser1223@gmail.com](mailto:stableuser1223@gmail.com?subject=AdaptDiffuse%20feedback)
 
-**GitHub:** open an issue or comment in the chat on
-[github.com/jhfuheuiwfh/adaptdiffuse](https://github.com/jhfuheuiwfh/adaptdiffuse/issues)
+**GitHub:** open a **Feedback** or **Bug report** issue (templates below) or comment on
+[github.com/jhfuheuiwfh/adaptdiffuse](https://github.com/jhfuheuiwfh/adaptdiffuse/issues/new/choose)
 
 When reporting a problem, please include:
 
@@ -320,11 +320,16 @@ When reporting a problem, please include:
                         'style="display:inline-block;padding:10px 18px;border-radius:10px;'
                         'background:linear-gradient(135deg,#6ea8fe,#8b5cf6);color:#fff;'
                         'text-decoration:none;font-weight:600;">Email support</a>&nbsp;&nbsp;'
-                        '<a href="https://github.com/jhfuheuiwfh/adaptdiffuse/issues" '
+                        '<a href="https://github.com/jhfuheuiwfh/adaptdiffuse/issues/new?template=feedback.yml" '
                         'target="_blank" '
                         'style="display:inline-block;padding:10px 18px;border-radius:10px;'
                         'background:var(--panel);border:1px solid var(--line);color:#e7eefc;'
-                        'text-decoration:none;font-weight:600;">Open GitHub issue</a>'
+                        'text-decoration:none;font-weight:600;">Feedback on GitHub</a>&nbsp;&nbsp;'
+                        '<a href="https://github.com/jhfuheuiwfh/adaptdiffuse/issues/new?template=bug_report.yml" '
+                        'target="_blank" '
+                        'style="display:inline-block;padding:10px 18px;border-radius:10px;'
+                        'background:var(--panel);border:1px solid var(--line);color:#e7eefc;'
+                        'text-decoration:none;font-weight:600;">Bug report on GitHub</a>'
                     )
 
         refresh_btn.click(

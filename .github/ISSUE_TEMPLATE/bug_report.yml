@@ -1,0 +1,44 @@
+name: Bug report
+description: Report an error or unexpected behavior
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Clear description of the bug and steps to reproduce.
+      placeholder: |
+        1. Opened the WebUI
+        2. Clicked Generate
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message
+      description: Exact text from the status area or console.
+      render: shell
+    validations:
+      required: false
+  - type: input
+    id: backend
+    attributes:
+      label: Backend / GPU
+      description: Engine + device shown at the top of the page (e.g. `sdcpp:vulkan`, RX 580).
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model / LoRA
+      description: Which checkpoint (and optional LoRA) you used.
+    validations:
+      required: false
+  - type: checkboxes
+    id: contact
+    attributes:
+      label: Contact
+      options:
+        - label: You can also email stableuser1223@gmail.com instead of (or in addition to) this issue.

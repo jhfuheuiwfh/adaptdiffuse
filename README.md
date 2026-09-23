@@ -91,6 +91,15 @@ adaptdiffuse/
 └── outputs/             # generations (gitignored)
 ```
 
+## Support
+
+Feedback and bug reports welcome:
+
+- **Email:** [stableuser1223@gmail.com](mailto:stableuser1223@gmail.com?subject=AdaptDiffuse%20feedback)
+- **GitHub:** [Feedback](https://github.com/jhfuheuiwfh/adaptdiffuse/issues/new?template=feedback.yml) · [Bug report](https://github.com/jhfuheuiwfh/adaptdiffuse/issues/new?template=bug_report.yml) · [All issues](https://github.com/jhfuheuiwfh/adaptdiffuse/issues)
+
+The WebUI has a **Support** tab with the same contacts.
+
 ## Uninstall
 
 Delete the project folder (includes `.venv`, `models/`, `outputs/`).
