@@ -1,0 +1,20 @@
+# Local environment and state
+.venv/
+__pycache__/
+*.pyc
+backend.json
+.setup_done
+ui_*.log
+vulkan-sdk.exe
+directml*.whl
+
+# Runtime data (large / regenerable)
+bin/
+models/
+outputs/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
