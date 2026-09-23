@@ -12,8 +12,8 @@ NVIDIA (CUDA)  →  AMD/Intel (Vulkan)  →  Forced ROCm(HIP)  →  DirectML (ve
 
 ## Quick start (Windows)
 
-1. Install [Python 3.10+](https://www.python.org/downloads/) (check *Add to PATH*).
-2. Double-click **`launch.bat`**.
+1. Install [Python 3.10](https://www.python.org/downloads/release/python-3100/) (any 3.10.x; check *Add to PATH*).
+2. Double-click **`launch.bat`** — it enumerates every installed Python (py launcher, PATH, registry, common dirs) and uses **3.10**.
 3. First run creates a private `.venv`, detects your GPU, downloads the matching sd-cli
    build (+ Vulkan SDK only if the loader is missing), and opens **http://127.0.0.1:7860**.
 
