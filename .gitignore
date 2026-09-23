@@ -5,6 +5,7 @@ __pycache__/
 backend.json
 .setup_done
 ui_*.log
+logs/
 vulkan-sdk.exe
 directml*.whl
 
