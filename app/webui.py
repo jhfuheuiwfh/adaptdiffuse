@@ -297,6 +297,36 @@ sd-cli uses ggml quantization straight from the model file (GGUF recommended).
                     """
                 )
 
+            with gr.TabItem("Support"):
+                gr.Markdown(
+                    """
+### Found a bug or have feedback?
+
+**Email:** [stableuser1223@gmail.com](mailto:stableuser1223@gmail.com?subject=AdaptDiffuse%20feedback)
+
+**GitHub:** open an issue or comment in the chat on
+[github.com/jhfuheuiwfh/adaptdiffuse](https://github.com/jhfuheuiwfh/adaptdiffuse/issues)
+
+When reporting a problem, please include:
+
+- What you tried (prompt / model / LoRA / backend)
+- The exact error message from the **status** area or console
+- Your GPU + backend shown at the top of this page (`Engine` / `Device` pills)
+                    """
+                )
+                with gr.Row():
+                    gr.HTML(
+                        '<a href="mailto:stableuser1223@gmail.com?subject=AdaptDiffuse%20feedback" '
+                        'style="display:inline-block;padding:10px 18px;border-radius:10px;'
+                        'background:linear-gradient(135deg,#6ea8fe,#8b5cf6);color:#fff;'
+                        'text-decoration:none;font-weight:600;">Email support</a>&nbsp;&nbsp;'
+                        '<a href="https://github.com/jhfuheuiwfh/adaptdiffuse/issues" '
+                        'target="_blank" '
+                        'style="display:inline-block;padding:10px 18px;border-radius:10px;'
+                        'background:var(--panel);border:1px solid var(--line);color:#e7eefc;'
+                        'text-decoration:none;font-weight:600;">Open GitHub issue</a>'
+                    )
+
         refresh_btn.click(
             lambda: _fmt_backend(ensure_backend()),
             outputs=[backend_md],
