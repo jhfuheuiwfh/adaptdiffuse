@@ -2,7 +2,7 @@
 gradio>=5.0.0,<6
 diffusers>=0.30.0
 transformers>=4.44.0
-accelerate>=0.33.0
+accelerate>=1.15.0
 safetensors>=0.4.3
 huggingface_hub>=0.24.0,<1.0
 Pillow>=10.0.0
