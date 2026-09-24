@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-checks:
+    name: Static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install check dependencies
+        run: python -m pip install --quiet pyyaml
+
+      - name: Byte-compile app/
+        run: python -m compileall -q app
+
+      - name: Import package
+        run: python -c "import app; print('AdaptDiffuse', app.__version__)"
+
+      - name: Repository checks
+        run: python .github/scripts/check_repo.py
+
+  windows-smoke:
+    name: Windows smoke (pip install + import)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install requirements
+        run: python -m pip install -r requirements.txt
+
+      - name: Import WebUI
+        run: python -c "import app.webui; import app; print('AdaptDiffuse', app.__version__)"
