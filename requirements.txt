@@ -1,5 +1,5 @@
 # Core WebUI & inference stack (torch is installed by launch.bat / app.backend based on GPU)
-gradio>=5.0.0,<6
+gradio>=6.28.0,<7
 diffusers>=0.30.0
 transformers>=4.44.0
 accelerate>=0.33.0
