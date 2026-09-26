@@ -8,6 +8,7 @@ API notes / safety:
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -15,6 +16,8 @@ from typing import Optional
 from urllib.parse import urlparse
 
 import requests
+
+from .backend import log, note_failure
 
 ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT / "models"
@@ -44,7 +47,26 @@ def _safe_name(url: str, fallback: str = "model") -> str:
     return name or fallback
 
 
-def _stream_to(url: str, dest: Path, headers: Optional[dict] = None) -> Path:
+def sha256_of(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _stream_to(
+    url: str,
+    dest: Path,
+    headers: Optional[dict] = None,
+    expected_sha256: Optional[str] = None,
+) -> Path:
+    """Stream a download to `<dest>.part`, verify it, then rename into place.
+
+    Verifies byte count against Content-Length and, when the provider
+    publishes one, the SHA-256 of the file. A failed file is never left
+    under its final name.
+    """
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
     with requests.get(url, stream=True, timeout=300, headers=headers or {}) as r:
@@ -60,6 +82,30 @@ def _stream_to(url: str, dest: Path, headers: Optional[dict] = None) -> Path:
                 if total and done % (16 << 20) < (1 << 20):
                     pct = done * 100 // total
                     print(f"  {dest.name}: {pct}% ({done // (1 << 20)} MB / {total // (1 << 20)} MB)", flush=True)
+
+    if total and done != total:
+        tmp.unlink(missing_ok=True)
+        msg = f"download incompleto de {dest.name}: {done} de {total} bytes"
+        note_failure("download de modelo", msg)
+        raise RuntimeError(msg + " (conexao caiu ou o servidor cortou o arquivo)")
+
+    if expected_sha256:
+        got = sha256_of(tmp)
+        want = expected_sha256.strip().lower()
+        if got != want:
+            # Keep the evidence, but never under the name the app would load.
+            broken = dest.with_suffix(dest.suffix + ".corrupt")
+            tmp.replace(broken)
+            msg = (
+                f"SHA-256 nao confere em {dest.name}: esperado {want[:16]}..., "
+                f"obtido {got[:16]}... (arquivo salvo como {broken.name})"
+            )
+            note_failure("verificacao de modelo", msg)
+            raise RuntimeError(msg)
+        log(f"SHA-256 verificado: {dest.name} ({got[:16]}...)")
+    else:
+        log(f"baixado: {dest.name} ({done // (1 << 20)} MB, sem hash publicado pelo provedor)")
+
     tmp.replace(dest)
     return dest
 
@@ -88,7 +134,12 @@ def download_huggingface(repo_id: str, filename: Optional[str] = None, subfolder
     return results
 
 
-def download_url(url: str, dest_dir: Optional[Path] = None, filename: Optional[str] = None) -> Path:
+def download_url(
+    url: str,
+    dest_dir: Optional[Path] = None,
+    filename: Optional[str] = None,
+    expected_sha256: Optional[str] = None,
+) -> Path:
     """Download an arbitrary model URL (CivitAI direct links, HF resolve, etc.)."""
     name = filename or _safe_name(url)
     if not any(name.lower().endswith(ext) for ext in (".safetensors", ".ckpt", ".pt", ".gguf", ".bin", ".vae")):
@@ -97,12 +148,12 @@ def download_url(url: str, dest_dir: Optional[Path] = None, filename: Optional[s
         try:
             head = requests.head(url, allow_redirects=True, timeout=30)
             ctype_guess = head.headers.get("content-type", "")
-        except Exception:
-            pass
+        except Exception as e:
+            note_failure("HEAD para detectar tipo do arquivo", e)
         if "octet-stream" in ctype_guess or not name:
             name = name + ".safetensors"
     target_dir = dest_dir or CHECKPOINTS_DIR
-    return _stream_to(url, target_dir / name)
+    return _stream_to(url, target_dir / name, expected_sha256=expected_sha256)
 
 
 def search_civitai(query: str, limit: int = 8, civit_type: str = "Checkpoint") -> list[dict]:
@@ -163,9 +214,11 @@ def download_civitai(url_or_id: str) -> Path:
             raise RuntimeError("No files on CivitAI version")
         dl = files[0].get("downloadUrl")
         name = files[0].get("name") or f"civitai_{url_or_id}.safetensors"
+        hashes = files[0].get("hashes") or {}
+        sha = hashes.get("SHA256") or hashes.get("sha256")
         if not dl:
             raise RuntimeError("CivitAI file has no downloadUrl")
-        return download_url(dl, dest_dir=dest_dir, filename=_safe_name(name))
+        return download_url(dl, dest_dir=dest_dir, filename=_safe_name(name), expected_sha256=sha)
 
     if "civitai.com" in url_or_id and "/models/" in url_or_id and "download" not in url_or_id:
         m = re.search(r"/models/(\d+)", url_or_id)

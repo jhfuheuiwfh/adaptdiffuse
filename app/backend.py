@@ -13,12 +13,14 @@ Cascade (in order):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import platform
 import shutil
 import subprocess
 import sys
+import time
 import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -28,8 +30,49 @@ ROOT = Path(__file__).resolve().parent.parent
 STATE_FILE = ROOT / "backend.json"
 BIN_DIR = ROOT / "bin"
 SDCPP_DIR = BIN_DIR / "sdcpp"
+LOG_DIR = ROOT / "logs"
+LOG_FILE = LOG_DIR / "backend.log"
 
 GPU_API = "https://api.github.com/repos/leejet/stable-diffusion.cpp/releases/latest"
+
+# ---------------------------------------------------------------------------
+# Diagnostics: every swallowed error ends up here instead of disappearing
+# ---------------------------------------------------------------------------
+
+_failures: list[str] = []
+
+
+def log(msg: str) -> None:
+    """Append a timestamped line to logs/backend.log (never raises)."""
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+    except Exception:
+        pass
+
+
+def note_failure(stage: str, err: object) -> None:
+    """Record a failure reason so the UI / troubleshooting can show it."""
+    text = f"{stage}: {err}"
+    if text not in _failures:
+        _failures.append(text)
+    if len(_failures) > 50:
+        del _failures[: len(_failures) - 50]
+    log("ERROR " + text)
+
+
+def failures() -> list[str]:
+    """Failure reasons collected during this process (newest last)."""
+    return list(_failures)
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 @dataclass
@@ -62,14 +105,16 @@ class BackendInfo:
             raw = json.loads(STATE_FILE.read_text(encoding="utf-8"))
             gpu = GPUInfo(**raw.pop("gpu", {}))
             return cls(gpu=gpu, **raw)
-        except Exception:
+        except Exception as e:
+            note_failure(f"backend.json corrompido ({STATE_FILE.name})", e)
             return None
 
     def save(self) -> None:
         STATE_FILE.write_text(self.to_json(), encoding="utf-8")
 
 
-def _run(cmd: list[str], timeout: int = 20) -> str:
+def _run_rc(cmd: list[str], timeout: int = 20) -> tuple[int, str]:
+    """Run a command and return (returncode, combined output)."""
     try:
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
@@ -82,9 +127,18 @@ def _run(cmd: list[str], timeout: int = 20) -> str:
             timeout=timeout,
             env=env,
         )
-        return (r.stdout or "") + (r.stderr or "")
-    except Exception:
-        return ""
+        out = (r.stdout or "") + (r.stderr or "")
+        if r.returncode != 0:
+            tail = (out.strip()[-500:] if out.strip() else "(sem saída)")
+            log(f"cmd rc={r.returncode}: {' '.join(cmd[:4])}... -> {tail}")
+        return r.returncode, out
+    except Exception as e:
+        note_failure("cmd " + " ".join(cmd[:4]), e)
+        return -1, ""
+
+
+def _run(cmd: list[str], timeout: int = 20) -> str:
+    return _run_rc(cmd, timeout)[1]
 
 
 def detect_gpus() -> list[GPUInfo]:
@@ -264,14 +318,16 @@ def install_payload(info: BackendInfo) -> None:
     """Install the Python deps that match the selected backend."""
     py = sys.executable
     req = str(ROOT / "requirements.txt")
-    _run([py, "-m", "pip", "install", "-q", "-r", req], timeout=1800)
+    rc, out = _run_rc([py, "-m", "pip", "install", "-q", "-r", req], timeout=1800)
+    if rc != 0:
+        note_failure("pip install -r requirements.txt", f"rc={rc} {out.strip()[-300:]}")
 
     if info.engine != "torch":
         # sd-cli needs no torch stack at all
         return
 
     if info.device == "cuda":
-        _run(
+        rc, out = _run_rc(
             [
                 py, "-m", "pip", "install", "-q",
                 "torch", "torchvision", "torchaudio",
@@ -279,9 +335,11 @@ def install_payload(info: BackendInfo) -> None:
             ],
             timeout=3600,
         )
+        if rc != 0:
+            note_failure("pip install torch (cu124)", f"rc={rc} {out.strip()[-300:]}")
     elif info.device == "hip":
         if platform.system() == "Linux":
-            _run(
+            rc, out = _run_rc(
                 [
                     py, "-m", "pip", "install", "-q",
                     "torch", "torchvision", "torchaudio",
@@ -289,6 +347,8 @@ def install_payload(info: BackendInfo) -> None:
                 ],
                 timeout=3600,
             )
+            if rc != 0:
+                note_failure("pip install torch (rocm6.2)", f"rc={rc} {out.strip()[-300:]}")
         else:
             info.reason += " (ROCm torch unavailable on Windows -> DirectML stack)"
             info.device = "directml"
@@ -297,13 +357,15 @@ def install_payload(info: BackendInfo) -> None:
     elif info.device == "directml":
         _install_directml(py)
     else:
-        _run(
+        rc, out = _run_rc(
             [
                 py, "-m", "pip", "install", "-q", "torch", "torchvision",
                 "--index-url", "https://download.pytorch.org/whl/cpu",
             ],
             timeout=3600,
         )
+        if rc != 0:
+            note_failure("pip install torch (cpu)", f"rc={rc} {out.strip()[-300:]}")
 
 
 def _install_directml(py: str) -> None:
@@ -330,7 +392,8 @@ def ensure_vulkan_sdk() -> bool:
                 with open(installer, "wb") as f:
                     for chunk in r.iter_content(1 << 20):
                         f.write(chunk)
-        _run(
+            log(f"Vulkan SDK installer baixado ({installer.stat().st_size // (1 << 20)} MB)")
+        rc, out = _run_rc(
             [
                 str(installer),
                 "--accept-licenses",
@@ -340,8 +403,14 @@ def ensure_vulkan_sdk() -> bool:
             ],
             timeout=1800,
         )
-        return has_vulkan_loader()
-    except Exception:
+        if rc != 0:
+            note_failure("instalacao do Vulkan SDK", f"rc={rc} {out.strip()[-300:]}")
+        ok = has_vulkan_loader()
+        if not ok:
+            note_failure("Vulkan SDK", "vulkan-1.dll ausente apos instalacao (reinicie o app/PC?)")
+        return ok
+    except Exception as e:
+        note_failure("download/instalacao do Vulkan SDK", e)
         return False
 
 
@@ -386,19 +455,63 @@ def _sdcpp_installed_device() -> Optional[str]:
 
 
 def _download_asset(asset: dict, dest_zip: Path) -> None:
+    """Download a release asset to a temp file, then verify size + digest.
+
+    GitHub exposes the asset SHA-256 in `asset["digest"]` ("sha256:<hex>");
+    when present the file is rejected unless it matches.
+    """
     import requests
 
+    dest_zip.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest_zip.with_suffix(dest_zip.suffix + ".part")
+    expected_size = int(asset.get("size") or 0)
+    digest = (asset.get("digest") or "")
     with requests.get(asset["browser_download_url"], stream=True, timeout=600) as r:
         r.raise_for_status()
-        with open(dest_zip, "wb") as f:
+        header_len = int(r.headers.get("content-length") or 0)
+        with open(tmp, "wb") as f:
             for chunk in r.iter_content(1 << 20):
-                f.write(chunk)
+                if chunk:
+                    f.write(chunk)
+
+    got = tmp.stat().st_size
+    want = expected_size or header_len
+    if want and got != want:
+        tmp.unlink(missing_ok=True)
+        raise RuntimeError(f"download incompleto de {asset['name']}: {got} de {want} bytes")
+
+    if digest.startswith("sha256:"):
+        want_hex = digest.split(":", 1)[1].strip().lower()
+        got_hex = _sha256(tmp)
+        if got_hex != want_hex:
+            tmp.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"SHA-256 nao confere em {asset['name']}: esperado {want_hex[:16]}..., obtido {got_hex[:16]}..."
+            )
+        log(f"SHA-256 verificado: {asset['name']} ({got_hex[:16]}...)")
+    else:
+        log(f"AVISO: {asset['name']} sem digest publicado; verificado apenas o tamanho")
+
+    tmp.replace(dest_zip)
 
 
 def _extract(zip_path: Path, target: Path) -> None:
+    """Extract a zip safely: block path traversal (Zip Slip) outside `target`."""
     target.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(target)
+    base = target.resolve()
+    try:
+        with zipfile.ZipFile(zip_path, "r") as z:
+            for member in z.infolist():
+                dest = (base / member.filename).resolve()
+                if dest != base and base not in dest.parents:
+                    raise RuntimeError(f"entrada insegura no zip bloqueada: {member.filename}")
+            z.extractall(target)
+    except zipfile.BadZipFile as e:
+        zip_path.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"zip corrompido ({zip_path.name}) - download interrompido ou asset mudou; "
+            "delete o arquivo e tente de novo"
+        ) from e
     zip_path.unlink(missing_ok=True)
 
 
@@ -437,12 +550,22 @@ def ensure_sdcpp_binary(device: str = "vulkan") -> Optional[Path]:
             if asset:
                 break
         if not asset:
+            note_failure(
+                "busca de binario sd-cli",
+                f"nenhum asset compativel com '{device}' na release; "
+                f"nomes disponiveis: {', '.join(a['name'] for a in assets[:8])}",
+            )
             return _sdcpp_exe()
 
         zip_path = BIN_DIR / asset["name"]
-        if not zip_path.exists():
-            _download_asset(asset, zip_path)
-        _extract(zip_path, SDCPP_DIR)
+        try:
+            if not zip_path.exists():
+                log(f"baixando sd-cli [{asset['name']}] ({asset.get('size', 0) // (1 << 20)} MB)")
+                _download_asset(asset, zip_path)
+            _extract(zip_path, SDCPP_DIR)
+        except Exception as e:
+            note_failure(f"instalacao do sd-cli ({asset['name']})", e)
+            return _sdcpp_exe()
 
         # CUDA builds may need the redistributable runtime (best effort)
         if device == "cuda":
@@ -453,10 +576,12 @@ def ensure_sdcpp_binary(device: str = "vulkan") -> Optional[Path]:
                         if not crt.exists():
                             _download_asset(a, crt)
                         _extract(crt, SDCPP_DIR)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        note_failure("cudart (runtime CUDA)", e)
                     break
-    except Exception:
+    except Exception as e:
+        # GitHub API unreachable, rate limit, proxy block, etc.
+        note_failure("API do GitHub (release sd-cli)", e)
         return _sdcpp_exe()
 
     return _sdcpp_exe()
