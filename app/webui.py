@@ -9,7 +9,17 @@ from pathlib import Path
 import gradio as gr
 
 from . import __version__
-from .backend import BackendInfo, ensure_backend, ensure_sdcpp_binary, ensure_vulkan_sdk, install_payload, select_backend, sync_sdcpp_device
+from .backend import (
+    LOG_FILE,
+    BackendInfo,
+    ensure_backend,
+    ensure_sdcpp_binary,
+    ensure_vulkan_sdk,
+    failures as collect_failures,
+    install_payload,
+    select_backend,
+    sync_sdcpp_device,
+)
 from .downloader import download_civitai, download_huggingface, list_local_models, search_civitai
 from .pipeline import DEFAULT_MODEL, GenParams, default_model_for, get_engine
 
@@ -80,6 +90,24 @@ def _fmt_backend(b: BackendInfo) -> str:
     )
 
 
+def _fmt_diag() -> str:
+    """Human-readable view of everything that failed behind the scenes."""
+    fails = collect_failures()
+    body = "\n".join(f"- ⚠️ `{f}`" for f in fails) if fails else "Nenhum problema registrado nesta sessão."
+    tail = ""
+    try:
+        if LOG_FILE.exists():
+            lines = LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()[-25:]
+            if lines:
+                tail = (
+                    "\n\n<details><summary>Últimas linhas de <code>logs/backend.log</code></summary>\n\n"
+                    "```\n" + "\n".join(lines) + "\n```\n</details>"
+                )
+    except Exception:
+        pass
+    return f"### Diagnóstico\n\n{body}{tail}"
+
+
 def build_ui() -> gr.Blocks:
     backend = ensure_backend()
 
@@ -98,6 +126,9 @@ def build_ui() -> gr.Blocks:
         with gr.Row():
             backend_md = gr.Markdown(_fmt_backend(backend), elem_id="backendinfo")
             refresh_btn = gr.Button("Redisetect hardware", variant="secondary", scale=0)
+
+        with gr.Accordion("Diagnóstico (downloads, backend, falhas)", open=False):
+            diag_md = gr.Markdown(_fmt_diag())
 
         with gr.Tabs():
             with gr.TabItem("Generate"):
@@ -333,8 +364,8 @@ When reporting a problem, please include:
                     )
 
         refresh_btn.click(
-            lambda: _fmt_backend(ensure_backend()),
-            outputs=[backend_md],
+            lambda: (_fmt_backend(ensure_backend()), _fmt_diag()),
+            outputs=[backend_md, diag_md],
         )
 
     return demo
