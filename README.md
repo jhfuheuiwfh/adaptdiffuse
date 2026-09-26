@@ -10,6 +10,14 @@ NVIDIA (CUDA)  →  AMD/Intel (Vulkan)  →  Forced ROCm(HIP)  →  DirectML (ve
                      └── all sd-cli builds, DirectML is the only torch fallback
 ```
 
+## Gallery
+
+Generated locally with AdaptDiffuse (SD 1.5 · Q5_1 GGUF):
+
+| | | |
+|---|---|---|
+| ![Neon city street at night](docs/sample_01.png) | ![Fantasy queen portrait](docs/sample_02.png) | ![Alien canyon landscape](docs/sample_03.png) |
+
 ## Quick start (Windows)
 
 1. Install [Python 3.10](https://www.python.org/downloads/release/python-3100/) (any 3.10.x; check *Add to PATH*).
