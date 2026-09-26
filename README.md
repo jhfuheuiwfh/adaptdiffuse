@@ -12,8 +12,8 @@ Primary engine is **sd-cli** ([stable-diffusion.cpp](https://github.com/leejet/s
 one small native binary, no torch needed:
 
 ```
-NVIDIA (CUDA)  →  AMD/Intel (Vulkan)  →  Forced ROCm(HIP)  →  DirectML (very old)  →  CPU
-                     └── all sd-cli builds, DirectML is the only torch fallback
+NVIDIA (CUDA)  →  AMD/Intel (Vulkan)  →  DirectML (very old)  →  CPU
+                     └── all sd-cli builds · ROCm(HIP) available as an explicit option
 ```
 
 ## Gallery
@@ -23,6 +23,48 @@ Generated locally with AdaptDiffuse (SD 1.5 · Q5_1 GGUF):
 | | | |
 |---|---|---|
 | ![Neon city street at night](docs/sample_01.png) | ![Fantasy queen portrait](docs/sample_02.png) | ![Alien canyon landscape](docs/sample_03.png) |
+
+## Why Adapt-Diffuse
+
+- **Runs on almost any GPU** — CUDA / Vulkan / DirectML / CPU picked automatically.
+  You never need to know what a "backend" is; ROCm is one dropdown away when you want it.
+- **No PyTorch by default** — one small native `sd-cli` binary instead of a multi-GB torch stack.
+- **Built for weak GPUs** — VAE tiling, attention slicing, CPU offload, GGUF quantization,
+  FP16 gated only on hardware known to be safe.
+- **Setup in one double-click** — `launch.bat` creates the venv, detects your hardware and opens the UI;
+  the first run downloads only what it actually needs.
+- **Private by design** — prompts and images never leave your machine. No telemetry, no accounts.
+- **A front-end, not a fork** — a lightweight local inference UI + backend orchestrator
+  instead of a 5 GB plugin ecosystem.
+
+## Downloads & verification
+
+Every remote artifact is checked before it can be executed or loaded:
+
+| What | Source | Verified with |
+|---|---|---|
+| sd-cli binaries | [leejet/stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) releases | exact byte count + published `sha256` digest (mismatch = rejected) |
+| Vulkan SDK | sdk.lunarg.com | silent install, then `vulkan-1.dll` presence is re-checked |
+| Models (CivitAI) | CivitAI API | SHA-256 from the API when published; mismatch → saved as `*.corrupt`, never loaded |
+| Models (Hugging Face) | `huggingface_hub` | LFS hash verification performed by the hub client |
+
+Archives are extracted with **path-traversal (Zip Slip) protection**, and partial downloads land in
+`*.part` files that are renamed into place only after verification.
+
+## Troubleshooting
+
+Failures are no longer silent: open **Diagnóstico** in the WebUI (or read `logs/backend.log`)
+to see the exact step that failed, its exit code and the message behind it.
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| sd-cli download fails / 404 | release asset renamed, proxy or firewall | check *Diagnóstico* for the available asset names; drop the zip manually into `bin/`, or switch **Backend preference** → `cpu` |
+| Vulkan still missing after install | installer blocked, GPU driver without Vulkan | install your GPU driver first, restart, then *Redisetect hardware* |
+| `pip install` errors in the log | offline or corporate package index | run `.venv\Scripts\python -m app.main --setup` manually with your own index |
+| CivitAI download 401 / 403 | age-restricted model | set `CIVITAI_API_KEY` (see above) |
+| A file ends up as `*.corrupt` | SHA-256 did not match the published hash | delete it and download again — that file was not trustworthy |
+| Out of memory while generating | model larger than VRAM | use a **GGUF** (Q5_1), 512px, or let `--max-vram` / offload do their job |
+| Wrong backend selected | ambiguous hardware report | **Backend** tab → pick a preference → *Apply & reinstall deps* |
 
 ## Quick start (Windows)
 
