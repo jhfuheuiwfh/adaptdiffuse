@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="AdaptDiffuse" width="360">
+</p>
+
 # AdaptDiffuse
 
 **Plug-and-play Stable Diffusion engine** with automatic GPU backend cascade and a clean WebUI.
