@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="AdaptDiffuse" width="360">
+  <img src="logo.jpg" alt="AdaptDiffuse" width="360">
 </p>
 
 # AdaptDiffuse
