@@ -6,6 +6,8 @@
 
 **Plug-and-play Stable Diffusion engine** with automatic GPU backend cascade and a clean WebUI.
 
+**▶ Try it online:** [huggingface.co/spaces/PedAI/Adapt-Diffuse](https://huggingface.co/spaces/PedAI/Adapt-Diffuse) — SD 1.5 demo running on free HF ZeroGPU hardware, no install needed.
+
 Primary engine is **sd-cli** ([stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp)) —
 one small native binary, no torch needed:
 
